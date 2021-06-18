@@ -31,37 +31,34 @@ class NEWSBoundingBox(BoundingBox):
 class SequenceKey(NamedTuple):
     sequence_id: int
 
-class Sequence():
+class Sequence(SynergyItem):
     def __init__(self, db_item, dataset_folder):
         self.dataset_folder = dataset_folder
         self.attributes = list(db_item.keys())
         self.sequence_id = db_item['id']
-        for attr_name, attr_value in db_item.items():
-            setattr(self, attr_name, attr_value)
+        self.origin = 'keemotion' if 'km' in db_item['assetId'] else 'synergy'
         self.annotations = []
         self.tracklets = {}
-        for num_frame, frame in enumerate(self.frames):
-            frame_ids = [x.get('playerId', 'Zero') for x in frame['boundingBoxes']]
+        for frame_idx, frame in enumerate(db_item['frames']):
             frame_annotation = []
-            for idx in sorted(enumerate(frame_ids), key=lambda x: x[1]):
-                box = frame['boundingBoxes'][idx[0]]
+            for box in frame['boundingBoxes']:
+                playerId = box.get('playerId', None)
                 newsbb = NEWSBoundingBox(int(box.get('x', 0)),
                                          int(box.get('y', 0)),
                                          int(box['width']),
                                          int(box['height']),
                                          box['keyPoints'],
-                                         box.get('playerId', None),
+                                         playerId,
                                          box.get('playerJerseyNumber', None),
                                          box.get('playerAffiliation', None),
                                          box.get('label', None))
                 frame_annotation.append(newsbb)
-                dframeBB = {'frameId': num_frame,
-                            'NEWSBoundingBox': newsbb}
-                if idx[1] in self.tracklets:
-                    self.tracklets[idx[1]].append(dframeBB)
-                else:
-                    self.tracklets[idx[1]] = [dframeBB]
+                if playerId:
+                    self.tracklets.setdefault(playerId, {})[frame_idx] = newsbb
             self.annotations.append(frame_annotation)
+
+        for attr_name, attr_value in db_item.items():
+            setattr(self, attr_name, attr_value)
 
     def load_image(self, img_name):
         filename = os.path.join(self.dataset_folder, img_name)
@@ -71,6 +68,13 @@ class Sequence():
         return cv2.cvtColor(image, cv2.COLOR_BGR2RGB)
 
     def get_thumbnails(self, tracklet_id, output_shape=None, margin=0):
+        '''Args:
+            tracklet_id - the player id string
+            output_shape - (image_width, image_height)
+            margin - margin in pixels to be added on 4 sides
+        Returns:
+            A generator of Thumnails
+        '''
         images = self.images
         for dd in self.tracklets[tracklet_id]:
             image = images[dd['frameId']]
@@ -146,6 +150,17 @@ class KeypointCorrectionTransform(Transform):
             for box in ann:
                 keypoints = correct_coordinates(box, (width, height))
                 box.keypoints = keypoints
+        return sequence
+
+
+class RemoveGroundTruth(Transform):
+    def __init__(self, keys=None):
+        self.keys = keys
+
+    def __call__(self, sequence_key: SequenceKey, sequence: Sequence):
+        if not self.keys or sequence_key in self.keys:
+            sequence.annotations = []
+            sequence.tracklets = {}
         return sequence
 
 
