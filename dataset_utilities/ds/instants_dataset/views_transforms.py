@@ -7,7 +7,7 @@ import numpy as np
 from dataset_utilities.calib import set_z_vanishing_point, Point3D, Point2D
 from dataset_utilities.court import Court, BALL_DIAMETER
 from dataset_utilities.transforms import Transform
-from dataset_utilities.utils import gamma_correction, RandomCropper, IncompatibleCropException, setdefaultattr
+from dataset_utilities.utils import gamma_correction, RandomCropper, IncompatibleCropException, setdefaultattr, parameters_to_affine_transform
 from .views_dataset import View, ViewKey
 
 try:
@@ -258,24 +258,7 @@ class ViewCropperTransform(Transform):
         except IncompatibleCropException:
             return None
 
-        R = np.eye(3)
-        center = ((y_slice.start + y_slice.stop)/2, (x_slice.start + x_slice.stop)/2)
-        R[0:2,:] = cv2.getRotationMatrix2D(center, angle, 1.0)
-
-        x0 = x_slice.start
-        y0 = y_slice.start
-        width = x_slice.stop - x_slice.start
-        height = y_slice.stop - y_slice.start
-        T = np.array([[1, 0,-x0], [0, 1,-y0], [0, 0, 1]])
-
-        sx = self.output_shape[0]/width
-        sy = self.output_shape[1]/height
-        S = np.array([[sx, 0, 0], [0, sy, 0], [0, 0, 1]])
-
-        f = np.random.randint(0,2)*2-1 if self.do_flip else 1 # random sample in {-1,1}
-        F = np.array([[f, 0, 0], [0, 1, 0], [0, 0, 1]])
-
-        A = S@T@R@F
+        A = parameters_to_affine_transform(angle, x_slice, y_slice, self.output_shape, self.do_flip)
 
         if self.debug:
             w, h = self.output_shape

@@ -283,7 +283,10 @@ class ViewsDataset(AugmentedDataset):
 
         if self.crop:
             for offset in instant.offsets:
-                image = instant.all_images[(c,offset)][y_slice, x_slice]
+                index = (c,offset)
+                if index not in instant.all_images:
+                    continue # that offset was not downloaded with the download flag of instants dataset
+                image = instant.all_images[index][y_slice, x_slice]
                 if self.rescale and self.output_shape:
                     image = cv2.resize(image, self.output_shape)
                 all_images.append(image)

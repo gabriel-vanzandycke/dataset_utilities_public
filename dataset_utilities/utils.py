@@ -70,7 +70,8 @@ class RandomCropper():
             "output_shape": self.output_shape, "def_min": self.def_min, "def_max": self.def_max, "margin": self.margin,
             "max_angle": self.max_angle, "random_position": self.random_position
         }
-    def __call__(self, calib, keypoints, seed, def_min=None, def_max=None, margin=None):
+
+    def __call__(self, calib, keypoints, seed=0, def_min=None, def_max=None, margin=None):
         random_state = np.random.get_state()
         np.random.seed(seed)
 
@@ -85,14 +86,14 @@ class RandomCropper():
 
         new_calib = calib
 
-        wanted_definition = np.random.uniform(def_min, def_max)
+        target_definition = np.random.uniform(def_min, def_max)
         actual_definition = new_calib.compute_length2D(100, Point3D(np.mean(keypoints, axis=1)))
-        scale = actual_definition/wanted_definition
-        tmp_width, tmp_height = tuple(int(x*scale) for x in self.output_shape)
+        scale = target_definition/actual_definition
+        tmp_width, tmp_height = tuple(int(x/scale) for x in self.output_shape)
 
-        # If wanted definition makes the output image bigger than input image, try with a bigger definition
+        # If target definition makes the output image bigger than input image, try with a bigger definition
         if tmp_width >= new_calib.width or tmp_height >= new_calib.height:
-            return self(calib, keypoints, seed=seed+1, def_min=wanted_definition+10, margin=margin)
+            return self(calib, keypoints, seed=seed+1, def_min=target_definition+10, margin=margin)
 
         margin_2D = new_calib.compute_length2D(margin, Point3D(np.mean(keypoints, axis=1)))
         keypoints_2D = new_calib.project_3D_to_2D(keypoints)
@@ -115,7 +116,7 @@ class RandomCropper():
             x_offset = int(np.mean(keypoints_2D.x)-tmp_width/2)
             y_offset = int(np.mean(keypoints_2D.y)-tmp_height/2)
             if x_offset < 0 or y_offset < 0 or x_offset+tmp_width >= new_calib.width or y_offset+tmp_height >= new_calib.height:
-                return self(calib, keypoints, seed=seed+1, def_min=wanted_definition+10, margin=margin)
+                return self(calib, keypoints, seed=seed+1, def_min=target_definition+10, margin=margin)
 
         x_slice = slice(x_offset, x_offset+tmp_width, None)
         y_slice = slice(y_offset, y_offset+tmp_height, None)
@@ -127,6 +128,26 @@ class RandomCropper():
 
         return angle, x_slice, y_slice
 
+def parameters_to_affine_transform(angle, x_slice, y_slice, output_shape, do_flip=False):
+    assert not do_flip, "There is a bug with random flip"
+    R = np.eye(3)
+    center = ((y_slice.start + y_slice.stop)/2, (x_slice.start + x_slice.stop)/2)
+    R[0:2,:] = cv2.getRotationMatrix2D(center, angle, 1.0)
+
+    x0 = x_slice.start
+    y0 = y_slice.start
+    width = x_slice.stop - x_slice.start
+    height = y_slice.stop - y_slice.start
+    T = np.array([[1, 0,-x0], [0, 1,-y0], [0, 0, 1]])
+
+    sx = output_shape[0]/width
+    sy = output_shape[1]/height
+    S = np.array([[sx, 0, 0], [0, sy, 0], [0, 0, 1]])
+
+    f = np.random.randint(0,2)*2-1 if do_flip else 1 # random sample in {-1,1}
+    F = np.array([[f, 0, 0], [0, 1, 0], [0, 0, 1]])
+
+    return S@T@R@F
 
 class VideoReaderDataset(Dataset):
     cap = None
@@ -327,3 +348,25 @@ def setdefaultattr(obj, name, value):
     if not hasattr(obj, name):
         setattr(obj, name, value)
     return getattr(obj, name)
+
+def split_equally(d, K):
+    """ splits equally the keys of d given their values
+        arguments:
+            d (dict) - A dict {"label1": 30, "label2": 45, "label3": 22, ... "label<N>": 14}
+            K (int)  - The number of split to make
+        returns:
+            A list of 'K' lists splitting equally the values of 'd':
+            e.g. [[label1, label12, label19], [label2, label15], [label3, label10, label11], ...]
+            where
+            ```
+               d["label1"]+d["label12"]+d["label19"]  ~=  d["label2"]+d["label15"]  ~=  d["label3"]+d["label10"]+d["label11]
+            ```
+    """
+    s = sorted(d.items(), key=lambda kv: kv[1])
+    f = [{"count": 0, "list": []} for _ in range(K)]
+    while s:
+        arena_label, count = s.pop(-1)
+        index, _ = min(enumerate(f), key=(lambda x: x[1]["count"]))
+        f[index]["count"] += count
+        f[index]["list"].append(arena_label)
+    return [x["list"] for x in f]

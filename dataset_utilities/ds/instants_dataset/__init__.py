@@ -5,6 +5,7 @@ from .views_dataset import ViewsDataset, ViewKey, View, BuildBallViews, BuildCam
 from .views_transforms import AddBallAnnotation, UndistortTransform, RectifyTransform, \
     RectifyUndistortTransform, ComputeDiff, GameGammaColorTransform, GameRGBColorTransform, \
     BayeringTransform, ViewCropperTransform, AddCalibFactory, AddCourtFactory, AddDiffFactory, ExtractViewData
+from .subset_splitters import DeepSportKeysSplitter, KFoldsArenaLabelsTestingKeysSplitter, TestingArenaLabelsKeysSplitter
 
 try:
     from .views_transforms import AddBallDistance

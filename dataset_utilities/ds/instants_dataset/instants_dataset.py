@@ -14,10 +14,12 @@ from dataset_utilities.court import Court, court_dim as COURT_DIM
 
 class DownloadFlags(IntFlag):
     NONE = 0
-    WITH_IMAGES = 1
+    WITH_IMAGE = 1
     WITH_CALIB_FILE = 2
     WITH_FOREGROUND_MASK_FILE = 4
     WITH_HUMAN_SEGMENTATION_MASKS = 8
+    WITH_FOLLOWING_IMAGE = 16
+    WITH_ALL_IMAGES = 32
     ALL = -1
 
 class InstantKey(NamedTuple):
@@ -74,8 +76,14 @@ class Instant():
     def all_images(self):
         all_images = {}
         for c in range(self.num_cameras):
-            for offset in self.offsets:
-                all_images[(c,offset)] = self.load_image(c, offset)
+            for idx, offset in enumerate(self.offsets):
+                if     (idx == 0) \
+                    or (idx == 1 and self.download_flags & DownloadFlags.WITH_FOLLOWING_IMAGE) \
+                    or (self.download_flags & DownloadFlags.WITH_ALL_IMAGES):
+                    try:
+                        all_images[(c,offset)] = self.load_image(c, offset)
+                    except BaseException as e:
+                        raise ValueError((self.offsets, self.key)) from e
         return all_images
 
     @property
@@ -186,9 +194,12 @@ class Instant():
     @property
     def files(self):
         for i in range(0, int(self.num_cameras)):
-            if self.download_flags & DownloadFlags.WITH_IMAGES:
-                for offset in self.offsets:
-                    yield self.get_filekey("camcourt{}_".format(i+1), "_{}.png".format(offset))
+            if self.download_flags & DownloadFlags.WITH_IMAGE:
+                for idx, offset in enumerate(self.offsets):
+                    if     (self.download_flags & DownloadFlags.WITH_ALL_IMAGES) \
+                        or (self.download_flags & DownloadFlags.WITH_FOLLOWING_IMAGE and idx == 1) \
+                        or (idx == 0):
+                        yield self.get_filekey("camcourt{}_".format(i+1), "_{}.png".format(offset))
             if self.download_flags & DownloadFlags.WITH_CALIB_FILE:
                 yield self.get_filekey("camcourt{}_".format(i+1), ".json")
             if self.download_flags & DownloadFlags.WITH_FOREGROUND_MASK_FILE:
@@ -228,7 +239,7 @@ class Instant():
             "annotation_duration": self.annotation_duration,
             "annotations": [a.to_annotation() for a in self.annotations],
             "annotation_game_state": self.annotation_game_state,
-            "annotated_human_masks": len(self.human_masks) > 0
+            "annotated_human_masks": self.annotated_human_masks
         }
 
     def to_dict(self):

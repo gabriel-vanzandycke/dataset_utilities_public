@@ -1,7 +1,7 @@
 import numpy as np
 from dataset_utilities.transforms import Transform
 from dataset_utilities.utils import gamma_correction
-from . import InstantKey, Instant
+from . import InstantKey, Instant, DownloadFlags
 
 
 class GammaCorrectionTransform(Transform):
@@ -24,4 +24,15 @@ class GammaCorrectionTransform(Transform):
             gammas = np.array(self.transform_dict[instant_key.game_id])
             for k, image in instant.all_images.items():
                 instant.all_images[k] = gamma_correction(image, gammas)
+        return instant
+
+class RemoveGroundTruth(Transform):
+    def __init__(self, keys=None):
+        self.keys = keys
+    def __call__(self, instant_key: InstantKey, instant: InstantKey):
+        if not self.keys or instant_key in self.keys:
+            instant.annotations = []
+            if instant.download_flags & DownloadFlags.WITH_HUMAN_SEGMENTATION_MASKS:
+                instant.download_flags = instant.download_flags &~ DownloadFlags.WITH_HUMAN_SEGMENTATION_MASKS # removes human segmentation masks flags of that instant
+                instant.human_masks = []
         return instant
