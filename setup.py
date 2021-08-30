@@ -1,9 +1,9 @@
 from setuptools import setup, find_packages
 
 setup(
-    name='viprior_dataset_utilities',
+    name='dataset_utilities_public',
     author='Gabriel Van Zandycke',
-    author_email="gabriel.vanzandycke@synergysports.com",
+    author_email="gabriel.vanzandycke@uclouvain.be",
     url="https://gitlab.com/deepsport/dataset_utilities",
     licence="LGPL",
     python_requires='>=3.6',
