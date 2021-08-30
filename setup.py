@@ -12,7 +12,7 @@ setup(
     packages=find_packages(),
     install_requires=[
         "tqdm",
-        "numpy",
+        "numpy==1.19.5",
         "scipy",
         "opencv-python",
         "imageio",
