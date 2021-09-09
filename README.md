@@ -9,3 +9,4 @@ While the library original purpose is to be a uniform data loader, it also conta
 ### Existing datasets
 
 Instants Dataset - a dataset of instants
+Produced Sequences Dataset - a dataset of sequences
